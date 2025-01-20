@@ -10,7 +10,7 @@ app.use(bodyParser.json());
 
 // MongoDB Connection
 mongoose
-  .connect('mongodb://127.0.0.1:27017/gadre', {
+  .connect('mongodb+srv://scope:harshal@cluster0.eardc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
