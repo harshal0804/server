@@ -4,13 +4,15 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 
+require('dotenv').config(); // This must be at the top of your file
+
 // Initialize Express app
 const app = express();
 app.use(bodyParser.json());
 
 // MongoDB Connection
 mongoose
-  .connect('mongodb+srv://scope:harshal@cluster0.eardc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
+  .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
