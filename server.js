@@ -353,6 +353,52 @@ app.get('/distribution', async (req, res) => {
 
 
 
+// Define a new route for fetching dashboard data
+app.get('/dashboard', async (req, res) => {
+  try {
+    // Fetch data from various collections or sources
+    const shipmentsInTransit = await Shipment.countDocuments({ status: 'In Transit' });
+    const customsClearanceTime = await Shipment.aggregate([
+      { $match: { clearanceTime: { $exists: true } } },
+      { $group: { _id: null, avgClearanceTime: { $avg: '$clearanceTime' } } },
+    ]);
+    const pendingDeliveries = await Delivery.countDocuments({ status: 'Pending' });
+    const topManufacturers = await Distribution.aggregate([
+      { $group: { _id: '$manufacturer', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 },
+    ]);
+    const stockLevels = await Warehouse.find({}, { material: 1, stock: 1 });
+    const expiringInventory = await Inventory.countDocuments({
+      expiryDate: { $lte: new Date(new Date().setDate(new Date().getDate() + 30)) },
+    });
+
+    // Notifications logic
+    const lowStockAlerts = await Warehouse.find({ stock: { $lte: 10 } }, { material: 1, stock: 1 });
+    const delayedShipments = await Shipment.find({ status: 'Delayed' }, { shipmentId: 1 });
+
+    // Construct the response object
+    const dashboardData = {
+      shipmentsInTransit,
+      customsClearanceTime: customsClearanceTime[0]?.avgClearanceTime || 'N/A',
+      pendingDeliveries,
+      topManufacturers: topManufacturers.map((m) => m._id),
+      stockLevels,
+      expiringInventory,
+      notifications: {
+        lowStockAlerts,
+        delayedShipments,
+      },
+    };
+
+    // Send the response
+    res.status(200).json(dashboardData);
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    res.status(500).json({ message: 'Error fetching dashboard data', error });
+  }
+});
+
 
 
 
