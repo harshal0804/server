@@ -342,7 +342,7 @@ app.get('/seed2', async (req, res) => {
 });
 
 // Fetch API to get all distributions
-app.get('/distribution', async (req, res) => {
+app.get('/distribution-add', async (req, res) => {
   try {
     const distributions = await Distribution.find();
     res.status(200).json(distributions);
@@ -352,53 +352,45 @@ app.get('/distribution', async (req, res) => {
 });
 
 
-
-// Define a new route for fetching dashboard data
-app.get('/dashboard', async (req, res) => {
+app.post("/distribution", async (req, res) => {
   try {
-    // Fetch data from various collections or sources
-    const shipmentsInTransit = await Shipment.countDocuments({ status: 'In Transit' });
-    const customsClearanceTime = await Shipment.aggregate([
-      { $match: { clearanceTime: { $exists: true } } },
-      { $group: { _id: null, avgClearanceTime: { $avg: '$clearanceTime' } } },
-    ]);
-    const pendingDeliveries = await Delivery.countDocuments({ status: 'Pending' });
-    const topManufacturers = await Distribution.aggregate([
-      { $group: { _id: '$manufacturer', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 3 },
-    ]);
-    const stockLevels = await Warehouse.find({}, { material: 1, stock: 1 });
-    const expiringInventory = await Inventory.countDocuments({
-      expiryDate: { $lte: new Date(new Date().setDate(new Date().getDate() + 30)) },
+    // Validate incoming data
+    const {
+      orderDetails,
+      productInfo,
+      analysis,
+      documents,
+    } = req.body;
+
+    // Create a new distribution order
+    const newDistribution = new Distribution({
+      orderDetails,
+      productInfo,
+      analysis,
+      documents,
     });
 
-    // Notifications logic
-    const lowStockAlerts = await Warehouse.find({ stock: { $lte: 10 } }, { material: 1, stock: 1 });
-    const delayedShipments = await Shipment.find({ status: 'Delayed' }, { shipmentId: 1 });
+    // Save to database
+    await newDistribution.save();
 
-    // Construct the response object
-    const dashboardData = {
-      shipmentsInTransit,
-      customsClearanceTime: customsClearanceTime[0]?.avgClearanceTime || 'N/A',
-      pendingDeliveries,
-      topManufacturers: topManufacturers.map((m) => m._id),
-      stockLevels,
-      expiringInventory,
-      notifications: {
-        lowStockAlerts,
-        delayedShipments,
-      },
-    };
-
-    // Send the response
-    res.status(200).json(dashboardData);
+    res.status(201).json({
+      message: "New distribution order created successfully!",
+      data: newDistribution,
+    });
   } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    res.status(500).json({ message: 'Error fetching dashboard data', error });
+    if (error.code === 11000) {
+      // Handle duplicate orderId
+      res.status(400).json({
+        message: "Order ID already exists. Please use a unique Order ID.",
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to create distribution order.",
+        error: error.message,
+      });
+    }
   }
 });
-
 
 
 
