@@ -342,7 +342,7 @@ app.get('/seed2', async (req, res) => {
 });
 
 // Fetch API to get all distributions
-app.get('/distribution-add', async (req, res) => {
+app.get('/distribution', async (req, res) => {
   try {
     const distributions = await Distribution.find();
     res.status(200).json(distributions);
@@ -352,7 +352,7 @@ app.get('/distribution-add', async (req, res) => {
 });
 
 
-app.post("/distribution", async (req, res) => {
+app.post("/distribution-add async (req, res) => {
   try {
     // Validate incoming data
     const {
