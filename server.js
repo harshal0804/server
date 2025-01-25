@@ -352,7 +352,7 @@ app.get('/distribution', async (req, res) => {
 });
 
 
-app.post("/distribution-add async (req, res) => {
+app.post("/distributionadd", async (req, res) => {
   try {
     // Validate incoming data
     const {
