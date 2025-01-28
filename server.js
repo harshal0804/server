@@ -3,6 +3,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 require('dotenv').config(); // This must be at the top of your file
 
@@ -22,6 +25,130 @@ mongoose
   app.get('/' , async (req, res) => { 
     res.send("Welcome");
   });
+
+const app = express();
+app.use(bodyParser.json());
+app.use('/uploads', express.static('uploads')); // Serve uploaded files statically
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'uploads';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Update Distribution Schema to include files
+const distributionSchema = new mongoose.Schema({
+  orderDetails: {
+    customerName: String,
+    orderId: String,
+    orderDate: Date,
+    shippingAddress: String,
+    contactPhone: String,
+    contactEmail: String,
+    status: String,
+  },
+  productInfo: {
+    description: String,
+    quantity: Number,
+    unitWeight: String,
+    totalWeight: String,
+    dimensions: {
+      length: Number,
+      width: Number,
+      height: Number,
+      unit: String,
+    },
+  },
+  analysis: {
+    weightDistribution: String,
+    shippingClass: String,
+    handlingRequirements: [String],
+    specialInstructions: String,
+  },
+  documents: [{
+    name: String,
+    status: String,
+    timestamp: Date,
+    authorizedBy: String,
+    fileUrl: String, // Added field for file URL
+    fileType: String, // Added field for file type
+    originalName: String // Added field for original filename
+  }],
+});
+
+const Distribution = mongoose.model('Distribution', distributionSchema);
+
+// Modified distribution creation endpoint to handle file uploads
+app.post("/distributionadd", upload.array('files', 5), async (req, res) => {
+  try {
+    const {
+      orderDetails,
+      productInfo,
+      analysis,
+    } = req.body;
+
+    // Process uploaded files
+    const documents = req.files.map(file => ({
+      name: file.originalname,
+      status: "uploaded",
+      timestamp: new Date(),
+      authorizedBy: orderDetails.customerName,
+      fileUrl: `uploads/${file.filename}`,
+      fileType: path.extname(file.originalname),
+      originalName: file.originalname
+    }));
+
+    const newDistribution = new Distribution({
+      orderDetails: JSON.parse(orderDetails),
+      productInfo: JSON.parse(productInfo),
+      analysis: JSON.parse(analysis),
+      documents
+    });
+
+    await newDistribution.save();
+
+    res.status(201).json({
+      message: "New distribution order created successfully!",
+      data: newDistribution,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to create distribution order.",
+      error: error.message,
+    });
+  }
+});
+
+// Add endpoint to get file
+app.get('/file/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filepath = path.join(__dirname, 'uploads', filename);
+  res.sendFile(filepath);
+});
 
 // Define Schema for User
 const userSchema = new mongoose.Schema({
@@ -140,47 +267,6 @@ app.post('/login', async (req, res) => {
 
 
 
-// Define schema for Distribution Order
-const distributionSchema = new mongoose.Schema({
-  orderDetails: {
-    customerName: String,
-    orderId: String,
-    orderDate: Date,
-    shippingAddress: String,
-    contactPhone: String,
-    contactEmail: String,
-    status: String,
-  },
-  productInfo: {
-    description: String,
-    quantity: Number,
-    unitWeight: String,
-    totalWeight: String,
-    dimensions: {
-      length: Number,
-      width: Number,
-      height: Number,
-      unit: String,
-    },
-  },
-  analysis: {
-    weightDistribution: String,
-    shippingClass: String,
-    handlingRequirements: [String],
-    specialInstructions: String,
-  },
-  documents: [
-    {
-      name: String,
-      status: String,
-      timestamp: Date,
-      authorizedBy: String,
-    },
-  ],
-});
-
-// Create Distribution model
-const Distribution = mongoose.model('Distribution', distributionSchema);
 
 // Fetch Distribution Details API
 app.get('/distribution/:orderId', async (req, res) => {
@@ -348,47 +434,6 @@ app.get('/distribution', async (req, res) => {
     res.status(200).json(distributions);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching distributions', error });
-  }
-});
-
-
-app.post("/distributionadd", async (req, res) => {
-  try {
-    // Validate incoming data
-    const {
-      orderDetails,
-      productInfo,
-      analysis,
-      documents,
-    } = req.body;
-
-    // Create a new distribution order
-    const newDistribution = new Distribution({
-      orderDetails,
-      productInfo,
-      analysis,
-      documents,
-    });
-
-    // Save to database
-    await newDistribution.save();
-
-    res.status(201).json({
-      message: "New distribution order created successfully!",
-      data: newDistribution,
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      // Handle duplicate orderId
-      res.status(400).json({
-        message: "Order ID already exists. Please use a unique Order ID.",
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to create distribution order.",
-        error: error.message,
-      });
-    }
   }
 });
 
